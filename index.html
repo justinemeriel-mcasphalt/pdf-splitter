@@ -2,17 +2,27 @@
 <html>
 
 <head>
-    <title>PDF Splitter</title>
+    <meta charset="UTF-8">
+    <title>PDF Splitter & OCR Renamer</title>
+
     <link rel="stylesheet" href="style.css">
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 
 <body>
 
     <h1>PDF Splitter & OCR Renamer</h1>
 
-    <input type="file" id="pdfUpload" accept=".pdf">
+    <input
+        type="file"
+        id="pdfUpload"
+        accept=".pdf">
 
-    <br><br>
+    <p id="status">
+        Upload a PDF to begin.
+    </p>
 
     <canvas id="pdfCanvas"></canvas>
 
