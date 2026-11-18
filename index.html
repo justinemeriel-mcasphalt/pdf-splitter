@@ -1,33 +1,63 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="UTF-8">
     <title>PDF Splitter & OCR Renamer</title>
 
-    <link rel="stylesheet" href="style.css">
-
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-</head>
 
+    <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+
+    <script src="https://unpkg.com/pdf-lib"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
 <body>
 
-    <h1>PDF Splitter & OCR Renamer</h1>
+<h1>PDF Splitter & OCR Renamer</h1>
 
-    <input
-        type="file"
-        id="pdfUpload"
-        accept=".pdf">
+<input type="file" id="pdfUpload" accept=".pdf">
 
-    <p id="status">
-        Upload a PDF to begin.
-    </p>
+<div id="controls">
+
+    <button id="extractBtn" disabled>
+        Extract Names
+    </button>
+
+    <button id="downloadBtn" disabled>
+        Download ZIP
+    </button>
+
+</div>
+
+<p id="status">Upload a PDF to begin.</p>
+
+<div id="canvasContainer">
 
     <canvas id="pdfCanvas"></canvas>
 
-    <script src="app.js"></script>
+    <canvas id="overlayCanvas"></canvas>
+
+</div>
+
+<h2>Detected Names</h2>
+
+<table id="nameTable">
+
+<thead>
+<tr>
+<th>Page</th>
+<th>Filename</th>
+</tr>
+</thead>
+
+<tbody></tbody>
+
+</table>
+
+<script src="app.js"></script>
 
 </body>
-
 </html>
