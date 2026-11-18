@@ -1,37 +1,308 @@
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 const upload = document.getElementById("pdfUpload");
-const canvas = document.getElementById("pdfCanvas");
-const ctx = canvas.getContext("2d");
-const status = document.getElementById("status");
+const pdfCanvas = document.getElementById("pdfCanvas");
+const overlayCanvas = document.getElementById("overlayCanvas");
 
-upload.addEventListener("change", async (event) => {
+const pdfCtx = pdfCanvas.getContext("2d");
+const overlayCtx = overlayCanvas.getContext("2d");
 
-    const file = event.target.files[0];
+const statusLabel = document.getElementById("status");
+const extractBtn = document.getElementById("extractBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+
+const nameTableBody =
+document.querySelector("#nameTable tbody");
+
+let pdfDocument = null;
+let pdfBytes = null;
+
+let rect = null;
+
+let dragging = false;
+let startX;
+let startY;
+
+upload.addEventListener("change", async (e) => {
+
+    const file = e.target.files[0];
 
     if (!file) return;
 
-    status.textContent = `Loading ${file.name}...`;
+    pdfBytes = await file.arrayBuffer();
 
-    const arrayBuffer = await file.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({
-        data: arrayBuffer
+    pdfDocument = await pdfjsLib.getDocument({
+        data: pdfBytes
     }).promise;
 
-    status.textContent =
-        `Loaded ${file.name} (${pdf.numPages} pages)`;
+    statusLabel.textContent =
+        `Loaded ${pdfDocument.numPages} pages`;
 
-    const page = await pdf.getPage(1);
+    await renderFirstPage();
+
+    extractBtn.disabled = false;
+});
+
+async function renderFirstPage() {
+
+    const page = await pdfDocument.getPage(1);
 
     const viewport = page.getViewport({
         scale: 1.5
     });
 
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    pdfCanvas.width = viewport.width;
+    pdfCanvas.height = viewport.height;
+
+    overlayCanvas.width = viewport.width;
+    overlayCanvas.height = viewport.height;
 
     await page.render({
-        canvasContext: ctx,
+        canvasContext: pdfCtx,
         viewport: viewport
     }).promise;
+}
 
+overlayCanvas.addEventListener("mousedown", (e) => {
+
+    startX = e.offsetX;
+    startY = e.offsetY;
+
+    dragging = true;
 });
+
+overlayCanvas.addEventListener("mousemove", (e) => {
+
+    if (!dragging) return;
+
+    overlayCtx.clearRect(
+        0,
+        0,
+        overlayCanvas.width,
+        overlayCanvas.height
+    );
+
+    const width = e.offsetX - startX;
+    const height = e.offsetY - startY;
+
+    overlayCtx.strokeStyle = "red";
+    overlayCtx.lineWidth = 2;
+
+    overlayCtx.strokeRect(
+        startX,
+        startY,
+        width,
+        height
+    );
+});
+
+overlayCanvas.addEventListener("mouseup", (e) => {
+
+    dragging = false;
+
+    rect = {
+
+        x: Math.min(startX, e.offsetX),
+
+        y: Math.min(startY, e.offsetY),
+
+        width: Math.abs(e.offsetX - startX),
+
+        height: Math.abs(e.offsetY - startY)
+
+    };
+
+    console.log(rect);
+});
+
+extractBtn.addEventListener("click",
+async () => {
+
+    if (!rect) {
+
+        alert("Draw a rectangle first.");
+
+        return;
+    }
+
+    statusLabel.textContent =
+        "Running OCR...";
+
+    nameTableBody.innerHTML = "";
+
+    const names = [];
+
+    for (
+        let pageNumber = 1;
+        pageNumber <= pdfDocument.numPages;
+        pageNumber++
+    ) {
+
+        statusLabel.textContent =
+        `OCR Page ${pageNumber} of ${pdfDocument.numPages}`;
+
+        const page =
+            await pdfDocument.getPage(pageNumber);
+
+        const viewport =
+            page.getViewport({
+                scale: 1.5
+            });
+
+        const tempCanvas =
+            document.createElement("canvas");
+
+        const tempCtx =
+            tempCanvas.getContext("2d");
+
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+
+        await page.render({
+            canvasContext: tempCtx,
+            viewport: viewport
+        }).promise;
+
+        const crop =
+            document.createElement("canvas");
+
+        crop.width = rect.width;
+        crop.height = rect.height;
+
+        const cropCtx =
+            crop.getContext("2d");
+
+        cropCtx.drawImage(
+            tempCanvas,
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+            0,
+            0,
+            rect.width,
+            rect.height
+        );
+
+        const result =
+        await Tesseract.recognize(
+            crop,
+            "eng"
+        );
+
+        let text =
+            result.data.text.trim();
+
+        text =
+            sanitizeFilename(text);
+
+        if (!text) {
+            text = `Page_${pageNumber}`;
+        }
+
+        names.push(text);
+
+        addRow(pageNumber, text);
+    }
+
+    statusLabel.textContent =
+        "OCR Complete";
+
+    downloadBtn.disabled = false;
+});
+
+downloadBtn.addEventListener("click",
+async () => {
+
+    const pdfDoc =
+        await PDFLib.PDFDocument.load(pdfBytes);
+
+    const zip = new JSZip();
+
+    const rows =
+        document.querySelectorAll(
+            "#nameTable tbody tr"
+        );
+
+    const filenames = [];
+
+    rows.forEach(row => {
+
+        filenames.push(
+
+            row.querySelector("input").value
+
+        );
+
+    });
+
+    for (
+        let i = 0;
+        i < pdfDoc.getPageCount();
+        i++
+    ) {
+
+        const newPdf =
+        await PDFLib.PDFDocument.create();
+
+        const [copiedPage] =
+        await newPdf.copyPages(
+            pdfDoc,
+            [i]
+        );
+
+        newPdf.addPage(copiedPage);
+
+        const bytes =
+            await newPdf.save();
+
+        zip.file(
+            filenames[i] + ".pdf",
+            bytes
+        );
+    }
+
+    const zipBlob =
+        await zip.generateAsync({
+            type: "blob"
+        });
+
+    const url =
+        URL.createObjectURL(zipBlob);
+
+    const a =
+        document.createElement("a");
+
+    a.href = url;
+
+    a.download =
+    "Renamed_PDFs.zip";
+
+    a.click();
+});
+
+function addRow(page, text) {
+
+    const row =
+        document.createElement("tr");
+
+    row.innerHTML = `
+        <td>${page}</td>
+        <td>
+          <input value="${text}">
+        </td>
+    `;
+
+    nameTableBody.appendChild(row);
+}
+
+function sanitizeFilename(text) {
+
+    text = text
+        .replace(/[<>:"/\\\\|?*]/g, "")
+        .replace(/\s+/g, "_")
+        .trim();
+
+    return text;
+}
