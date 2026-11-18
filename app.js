@@ -164,15 +164,26 @@ async () => {
             viewport: viewport
         }).promise;
 
+        //-------------------------------------
+        // Create enlarged crop
+        //-------------------------------------
+        
         const crop =
             document.createElement("canvas");
-
-        crop.width = rect.width;
-        crop.height = rect.height;
-
+        
+        const SCALE = 3;
+        
+        crop.width =
+            Math.floor(rect.width * SCALE);
+        
+        crop.height =
+            Math.floor(rect.height * SCALE);
+        
         const cropCtx =
             crop.getContext("2d");
-
+        
+        // upscale while cropping
+        
         cropCtx.drawImage(
             tempCanvas,
             rect.x,
@@ -181,21 +192,83 @@ async () => {
             rect.height,
             0,
             0,
-            rect.width,
-            rect.height
+            crop.width,
+            crop.height
         );
-
+        
+        //-------------------------------------
+        // Convert to black/white
+        //-------------------------------------
+        
+        const imageData =
+            cropCtx.getImageData(
+                0,
+                0,
+                crop.width,
+                crop.height
+            );
+        
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+        
+            const avg =
+                (data[i] +
+                 data[i + 1] +
+                 data[i + 2]) / 3;
+        
+            const value =
+                avg > 180 ? 255 : 0;
+        
+            data[i] =
+            data[i + 1] =
+            data[i + 2] =
+                value;
+        }
+        
+        cropCtx.putImageData(
+            imageData,
+            0,
+            0
+        );
+        
+        //-------------------------------------
+        // OCR
+        //-------------------------------------
+        
         const result =
         await Tesseract.recognize(
             crop,
-            "eng"
+            "eng",
+            {
+                tessedit_pageseg_mode: 7,
+                tessedit_char_whitelist:
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+            }
         );
 
         let text =
-            result.data.text.trim();
+            result.data.text
+                .toUpperCase()
+                .replace(/[^A-Z0-9-]/g, "")
+                .trim();
 
-        text =
-            sanitizeFilename(text);
+        const match =
+            text.match(
+                /([A-Z]{5})[-]?([0-9]{3})/
+            );
+        
+        if (match) {
+        
+            text =
+                `${match[1]}-${match[2]}`;
+        }
+        else {
+        
+            text =
+                sanitizeFilename(text);
+        }
+
 
         if (!text) {
             text = `Page_${pageNumber}`;
