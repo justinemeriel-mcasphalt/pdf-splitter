@@ -4,5 +4,13 @@ body {
 }
 
 #pdfCanvas {
-    border: 1px solid black;
+    border: 1px solid #555;
+    display: block;
+    margin-top: 20px;
+    max-width: 100%;
+}
+
+#status {
+    margin-top: 10px;
+    color: #444;
 }
